@@ -1,11 +1,10 @@
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
-	"version": "1.0.0",
-	"minAppVersion": "0.15.0",
-	"description": "Demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
+	"id": "pasted-file-rename",
+	"name": "Pasted File Rename",
+	"version": "1.1.0",
+	"minAppVersion": "1.0.0",
+	"description": "Renames pasted files to include the active file's name as a prefix and ensures uniqueness.",
+	"author": "JaewonE",
+	"authorUrl": "https://github.com/JaewonE",
 	"isDesktopOnly": false
 }

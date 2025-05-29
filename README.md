@@ -1,94 +1,108 @@
-# Obsidian Sample Plugin
+# Pasted File Rename for Obsidian
 
-This is a sample plugin for Obsidian (https://obsidian.md).
+![Obsidian Version](https://img.shields.io/badge/Obsidian-1.0%2B-blue.svg) ![Release Date](https://img.shields.io/badge/Released-YYYY--MM--DD-green.svg) ![License](https://img.shields.io/badge/License-GPL--3.0-blue.svg)
 
-This project uses TypeScript to provide type checking and documentation.
-The repo depends on the latest plugin API (obsidian.d.ts) in TypeScript Definition format, which contains TSDoc comments describing what it does.
+**Automatically renames files dropped or pasted into your notes based on the active note's name, ensuring organized and contextually relevant attachment filenames.**
 
-This sample plugin demonstrates some of the basic functionality the plugin API can do.
-- Adds a ribbon icon, which shows a Notice when clicked.
-- Adds a command "Open Sample Modal" which opens a Modal.
-- Adds a plugin setting tab to the settings page.
-- Registers a global click event and output 'click' to the console.
-- Registers a global interval which logs 'setInterval' to the console.
+---
 
-## First time developing plugins?
+## Overview
 
-Quick starting guide for new plugin devs:
+The **Pasted File Rename** plugin for Obsidian is designed to streamline the process of adding local files (images, PDFs, etc.) to your notes. When you drag and drop a file into the editor, instead of using a generic name like "Pasted image 20231027100000.png" or the file's original arbitrary name, this plugin renames it to match the current note's name, appending a sequential number for uniqueness (e.g., `MyNote-1.png`, `MyNote-2.jpg`). This ensures your attachments are clearly associated with their context and easy to manage in your vault.
 
-- Check if [someone already developed a plugin for what you want](https://obsidian.md/plugins)! There might be an existing plugin similar enough that you can partner up with.
-- Make a copy of this repo as a template with the "Use this template" button (login to GitHub if you don't see it).
-- Clone your repo to a local development folder. For convenience, you can place this folder in your `.obsidian/plugins/your-plugin-name` folder.
-- Install NodeJS, then run `npm i` in the command line under your repo folder.
-- Run `npm run dev` to compile your plugin from `main.ts` to `main.js`.
-- Make changes to `main.ts` (or create new `.ts` files). Those changes should be automatically compiled into `main.js`.
-- Reload Obsidian to load the new version of your plugin.
-- Enable plugin in settings window.
-- For updates to the Obsidian API run `npm update` in the command line under your repo folder.
+**Key Motivations:**
 
-## Releasing new releases
+-   **Organized Attachments**: Keep your vault's attachment folder tidy and files easily identifiable.
+-   **Contextual Naming**: Automatically name attachments based on the note they are added to, improving clarity.
+-   **Simplified Workflow**: No need to manually rename pasted files after they are added.
+-   **Respects Obsidian Settings**: Uses your configured attachment folder.
 
-- Update your `manifest.json` with your new version number, such as `1.0.1`, and the minimum Obsidian version required for your latest release.
-- Update your `versions.json` file with `"new-plugin-version": "minimum-obsidian-version"` so older versions of Obsidian can download an older version of your plugin that's compatible.
-- Create new GitHub release using your new version number as the "Tag version". Use the exact version number, don't include a prefix `v`. See here for an example: https://github.com/obsidianmd/obsidian-sample-plugin/releases
-- Upload the files `manifest.json`, `main.js`, `styles.css` as binary attachments. Note: The manifest.json file must be in two places, first the root path of your repository and also in the release.
-- Publish the release.
+This plugin provides a focused tool for automating the renaming of pasted/dropped local files, making it particularly useful for users who frequently embed local media into their notes.
 
-> You can simplify the version bump process by running `npm version patch`, `npm version minor` or `npm version major` after updating `minAppVersion` manually in `manifest.json`.
-> The command will bump version in `manifest.json` and `package.json`, and add the entry for the new version to `versions.json`
+---
 
-## Adding your plugin to the community plugin list
+## Key Features
 
-- Check the [plugin guidelines](https://docs.obsidian.md/Plugins/Releasing/Plugin+guidelines).
-- Publish an initial version.
-- Make sure you have a `README.md` file in the root of your repo.
-- Make a pull request at https://github.com/obsidianmd/obsidian-releases to add your plugin.
+-   **Automatic Renaming on Drop**:
+    -   Renames files dropped into an editor when an active note is open.
+-   **Contextual Filename Generation**:
+    -   New filenames are based on the active note's basename (e.g., if the note is `Meeting Notes.md`, files will be named `Meeting Notes-1.ext`, `Meeting Notes-2.ext`, etc.).
+-   **Sequential Numbering**:
+    -   Automatically appends a numeric suffix (`-1`, `-2`, etc.) to the filename.
+    -   The suffix increments for each subsequently dropped file within the same operation or if a file with the same base name and suffix already exists.
+-   **Attachment Folder Integration**:
+    -   Respects Obsidian's attachment folder settings, placing renamed files in the location you've configured (e.g., vault root, specific subfolder, subfolder under current note's folder).
+-   **Extension Filtering**:
+    -   Only processes files with extensions specified in the plugin settings.
+    -   Defaults to a wide range of common image, video, audio, and PDF types.
+-   **Uniqueness Check**:
+    -   Before saving, checks if a filename stem (e.g., `MyNote-1`) is already used by any file in the target attachment folder, regardless of extension, to ensure the numeric suffix is unique for that stem.
+    -   Also verifies that the final proposed full path (e.g., `attachments/MyNote-1.png`) does not already exist.
+-   **Markdown Link Insertion**:
+    -   Automatically inserts a correctly formatted Markdown link for the newly renamed and saved file at the cursor position or replacing the selection.
+-   **Local Files Only**:
+    -   Designed to work with files dragged from your local file system. It does not process URLs or other non-file data dropped into the editor.
+-   **User Settings UI**:
+    -   Configure the list of allowed file extensions via the Obsidian settings panel.
+-   **Notifications**:
+    -   Provides on-screen notices for successful renaming/pasting or errors.
 
-## How to use
+---
 
-- Clone this repo.
-- Make sure your NodeJS is at least v16 (`node --version`).
-- `npm i` or `yarn` to install dependencies.
-- `npm run dev` to start compilation in watch mode.
+## How to Use
 
-## Manually installing the plugin
+1.  **Ensure an active note is open**: This plugin requires an active `.md` file to determine the base name for renaming.
+2.  **Drag and drop a file** (e.g., an image, PDF) from your computer directly into the Obsidian editor pane of the active note.
+3.  If the file's extension is in the "Allowed extensions" list, the plugin will:
+    -   Determine the correct attachment folder based on your Obsidian settings.
+    -   Generate a new unique filename in the format `ActiveNoteName-N.extension`.
+    -   Save the file to the attachment folder with the new name.
+    -   Insert a Markdown link to the new file into your note.
+4.  Notifications will indicate the outcome. For example, "Renamed and pasted: MyNote-1.png".
 
-- Copy over `main.js`, `styles.css`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/your-plugin-id/`.
+---
 
-## Improve code quality with eslint (optional)
-- [ESLint](https://eslint.org/) is a tool that analyzes your code to quickly find problems. You can run ESLint against your plugin to find common bugs and ways to improve your code. 
-- To use eslint with this project, make sure to install eslint from terminal:
-  - `npm install -g eslint`
-- To use eslint to analyze this project use this command:
-  - `eslint main.ts`
-  - eslint will then create a report with suggestions for code improvement by file and line number.
-- If your source code is in a folder, such as `src`, you can use eslint with this command to analyze all files in that folder:
-  - `eslint .\src\`
+## Configuration Settings
 
-## Funding URL
+Access these settings via **Obsidian Settings → Pasted File Rename**:
 
-You can include funding URLs where people who use your plugin can financially support it.
+-   **Allowed extensions**:
+    -   A comma-separated list of file extensions (without dots) that the plugin should process.
+    -   Example: `jpg,png,mp4,pdf`
+    -   These are case-insensitive.
+    -   _Default_: `jpg,jpeg,png,gif,heic,webp,bmp,tiff,svg,mp4,webm,ogv,mov,mkv,mp3,wav,ogg,m4a,pdf`
 
-The simple way is to set the `fundingUrl` field to your link in your `manifest.json` file:
+---
 
-```json
-{
-    "fundingUrl": "https://buymeacoffee.com"
-}
-```
+## Technical Details & Architecture
 
-If you have multiple URLs, you can also do:
+-   **Language**: Developed with **TypeScript**.
+-   **Obsidian API**:
+    -   Utilizes core Obsidian API components such as `Plugin`, `Editor`, `MarkdownView`, `TFile`, `TFolder`, `Notice`, `normalizePath`, `Vault.createBinary()`, `FileManager.getAvailablePathForAttachment()`, `FileManager.generateMarkdownLink()`.
+    -   Registers an event listener for `editor-drop` on the workspace.
+-   **File Handling**:
+    -   Uses Node.js `path` module for robust handling of file extensions and paths.
+    -   Reads dropped files as `ArrayBuffer` to save them into the vault.
+-   **Settings Management**:
+    -   Loads and saves settings using `loadData()` and `saveData()`.
+    -   Provides a `PluginSettingTab` for user configuration.
+-   **Event Driven**: The core logic is triggered by the `editor-drop` event.
 
-```json
-{
-    "fundingUrl": {
-        "Buy Me a Coffee": "https://buymeacoffee.com",
-        "GitHub Sponsor": "https://github.com/sponsors",
-        "Patreon": "https://www.patreon.com/"
-    }
-}
-```
+---
 
-## API Documentation
+## Future Enhancements
 
-See https://github.com/obsidianmd/obsidian-api
+Potential areas for future development could include:
+
+-   **Customizable Naming Template**: Allow users to define their own filename patterns beyond `ActiveNoteName-N.extension`.
+-   **Option to Disable Link Insertion**: Provide a setting to only rename and save the file without inserting a link.
+-   **Context Menu Integration**: Allow renaming of existing attachments via a right-click context menu.
+-   **Batch Processing**: A command to process files in a specific folder or across the vault (though this deviates from the current "pasted file" focus).
+
+---
+
+## License
+
+This plugin is released under the **GNU General Public License v3.0**. Refer to the [LICENSE](LICENSE.md) file for details.
+
+---

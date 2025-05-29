@@ -1,134 +1,303 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import {
+	App,
+	Editor,
+	MarkdownView,
+	Plugin,
+	PluginSettingTab,
+	Setting,
+	TFile,
+	TFolder,
+	Notice,
+	normalizePath,
+	FrontMatterCache,
+} from "obsidian";
+import * as path from "path"; // Using Node.js path module for robust extension handling
 
-// Remember to rename these classes and interfaces!
-
-interface MyPluginSettings {
-	mySetting: string;
+// Settings interface
+interface PastedFileRenameSettings {
+	allowedExtensions: string;
 }
 
-const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
-}
+// Default settings: Common image, video, audio, and PDF types
+const DEFAULT_SETTINGS: PastedFileRenameSettings = {
+	allowedExtensions:
+		"jpg,jpeg,png,gif,heic,webp,bmp,tiff,svg,mp4,webm,ogv,mov,mkv,mp3,wav,ogg,m4a,pdf",
+};
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+export default class PastedFileRenamePlugin extends Plugin {
+	settings: PastedFileRenameSettings;
 
 	async onload() {
 		await this.loadSettings();
 
-		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-		// Perform additional things with the ribbon
-		ribbonIconEl.addClass('my-plugin-ribbon-class');
+		this.addSettingTab(new PastedFileRenameSettingTab(this.app, this));
 
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status Bar Text');
+		// Register the editor-drop event
+		this.registerEvent(
+			this.app.workspace.on("editor-drop", this.handleEditorDrop)
+		);
 
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-sample-modal-simple',
-			name: 'Open sample modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'sample-editor-command',
-			name: 'Sample editor command',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				console.log(editor.getSelection());
-				editor.replaceSelection('Sample Editor Command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-sample-modal-complex',
-			name: 'Open sample modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-			}
-		});
-
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			console.log('click', evt);
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
+		console.log("Pasted File Rename plugin loaded.");
 	}
 
 	onunload() {
-
+		console.log("Pasted File Rename plugin unloaded.");
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		this.settings = Object.assign(
+			{},
+			DEFAULT_SETTINGS,
+			await this.loadData()
+		);
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
 	}
+
+	// Helper to get the Set of allowed extensions from settings string
+	private getAllowedExtensionsSet(): Set<string> {
+		return new Set(
+			this.settings.allowedExtensions
+				.toLowerCase()
+				.split(",")
+				.map((ext) => ext.trim())
+				.filter((ext) => ext.length > 0)
+		);
+	}
+
+	// Helper to determine the target attachment folder path, respecting Obsidian's settings
+	private async getAttachmentFolderPath(
+		currentOpenFile: TFile
+	): Promise<string> {
+		// This uses Obsidian's internal logic to determine the correct attachment path/folder.
+		// It creates the folder if it doesn't exist.
+		const dummyFileNameForPathResolution = `dummy-file-for-path-finding-${Date.now()}.tmp`;
+		const fullDummyPath =
+			await this.app.fileManager.getAvailablePathForAttachment(
+				dummyFileNameForPathResolution,
+				currentOpenFile.path
+			);
+
+		let folderPath = path.dirname(fullDummyPath);
+
+		// path.dirname might return '.' for root if the path was just 'filename.ext'
+		if (folderPath === ".") {
+			folderPath = ""; // Use empty string to represent vault root, which normalizePath handles
+		}
+		return normalizePath(folderPath);
+	}
+
+	// Helper to check if a stem (filename without extension) is already used by any file in a specific folder
+	private async isStemUsedInFolder(
+		stem: string,
+		folderPath: string
+	): Promise<boolean> {
+		const normalizedFolderPath = normalizePath(folderPath);
+		const targetFolder =
+			this.app.vault.getAbstractFileByPath(normalizedFolderPath);
+
+		if (targetFolder instanceof TFolder) {
+			// Check children of the specified folder
+			for (const child of targetFolder.children) {
+				if (child instanceof TFile && child.basename === stem) {
+					return true; // Stem is used
+				}
+			}
+		} else if (
+			normalizedFolderPath === "" ||
+			normalizedFolderPath === "/"
+		) {
+			// This case handles the vault root if targetFolder is not a TFolder (e.g. if path is empty for root)
+			// Or if getAbstractFileByPath returns null for the root path string.
+			const root = this.app.vault.getRoot();
+			for (const child of root.children) {
+				// Ensure we only check files directly in the root
+				if (
+					child instanceof TFile &&
+					child.basename === stem &&
+					child.parent?.isRoot()
+				) {
+					return true;
+				}
+			}
+		}
+		return false; // Stem is not used, or folder is not a valid TFolder (should be handled by getAttachmentFolderPath)
+	}
+
+	private handleEditorDrop = async (
+		event: DragEvent,
+		editor: Editor,
+		view: MarkdownView
+	) => {
+		if (!event.dataTransfer) return;
+
+		const activeFile = view.file; // TFile representing the currently active file in the editor
+
+		// 1. & 2. 활성화된 파일이 없으면 아무 일도 수행하지 않음 & 로컬 파일에 대해서만 수행
+		if (!activeFile) {
+			// This plugin is designed to work when there's an active file.
+			// If a user drops a file into an empty editor tab (no file backing it),
+			// activeFile will be null. In this case, we do nothing and let Obsidian handle it.
+			return;
+		}
+
+		const droppedItems = Array.from(event.dataTransfer.items);
+		const droppedFiles: File[] = [];
+
+		for (const item of droppedItems) {
+			// 4. 반드시 로컬 파일에 대해서만 수행 (item.kind === 'file')
+			//    http로 시작하는 링크 등은 item.kind === 'string' and item.type === 'text/uri-list' or 'text/html'
+			if (item.kind === "file") {
+				const file = item.getAsFile();
+				if (file) {
+					droppedFiles.push(file);
+				}
+			}
+		}
+
+		if (droppedFiles.length === 0) {
+			// No actual files were dropped (e.g., it was a URL or text snippet)
+			return;
+		}
+
+		const allowedExtensions = this.getAllowedExtensionsSet();
+		const processableFiles = droppedFiles.filter((file) => {
+			const fileExtensionWithDot = path.extname(file.name); // e.g., ".png"
+			if (!fileExtensionWithDot) return false; // No extension
+			const fileExtension = fileExtensionWithDot
+				.substring(1)
+				.toLowerCase(); // e.g., "png"
+			return allowedExtensions.has(fileExtension);
+		});
+
+		if (processableFiles.length === 0) {
+			// No files matched the allowed extensions
+			return;
+		}
+
+		// If we have processable files, prevent Obsidian's default drop handling.
+		event.preventDefault();
+		event.stopPropagation();
+
+		// 1. 붙여넣는 파일의 위치는 반드시 "Obsidian 기본 설정값을 존중"
+		const attachmentTargetFolder = await this.getAttachmentFolderPath(
+			activeFile
+		);
+		const activeFileBasename = activeFile.basename; // Active file's name without extension
+
+		const createdMarkdownLinks: string[] = [];
+		let currentNamingSuffix = 1; // This will be the number like in "activeFile-1", "activeFile-2"
+
+		for (const droppedFile of processableFiles) {
+			const originalFileExtensionWithDot = path.extname(droppedFile.name); // e.g., ".png"
+
+			let newUniqueFileBaseName: string; // e.g., "activeFile-1"
+			let newFullFileNameInVault: string; // e.g., "activeFile-1.png"
+			let targetPathInVault: string; // Full vault path, e.g., "attachments/activeFile-1.png"
+
+			// 3. 확장자를 제외하고 이름 중복 여부 확인하여 저장 (및 순차적 넘버링)
+			// Loop to find a unique numeric suffix for the base name
+			// eslint-disable-next-line no-constant-condition
+			while (true) {
+				const candidateStem = `${activeFileBasename}-${currentNamingSuffix}`;
+
+				// Check if this stem (e.g., "activeFile-1") is used by any file in the target folder
+				if (
+					!(await this.isStemUsedInFolder(
+						candidateStem,
+						attachmentTargetFolder
+					))
+				) {
+					// Stem is unique. Now form the full path and double-check it doesn't exist
+					// (unlikely if stem is unique, but good for robustness).
+					const candidateFileName =
+						candidateStem + originalFileExtensionWithDot;
+					const candidateFullPath = normalizePath(
+						path.join(attachmentTargetFolder, candidateFileName)
+					);
+
+					if (
+						!this.app.vault.getAbstractFileByPath(candidateFullPath)
+					) {
+						newUniqueFileBaseName = candidateStem;
+						newFullFileNameInVault = candidateFileName;
+						targetPathInVault = candidateFullPath;
+						break; // Found a unique name and path
+					}
+				}
+				currentNamingSuffix++; // Increment suffix and try again
+			}
+
+			try {
+				const fileData = await droppedFile.arrayBuffer();
+				const createdTFile = await this.app.vault.createBinary(
+					targetPathInVault,
+					fileData
+				);
+
+				// Generate a Markdown link to the newly created file
+				const markdownLink = this.app.fileManager.generateMarkdownLink(
+					createdTFile,
+					activeFile.path
+				);
+				createdMarkdownLinks.push(markdownLink);
+				new Notice(
+					`Renamed and pasted: ${newFullFileNameInVault}`,
+					4000
+				);
+			} catch (error) {
+				console.error(
+					`Pasted File Rename: Error processing file ${droppedFile.name}:`,
+					error
+				);
+				new Notice(
+					`Error renaming/pasting ${droppedFile.name}. Check console.`,
+					5000
+				);
+			}
+			// Increment the suffix for the *next* file in this batch, as per requirement:
+			// "image-png는 activeFile-k.png ... 다음에 저장되는 파일인 image.jpg는 activeFile-{k+1}.jpg가 되는 것이다."
+			currentNamingSuffix++;
+		}
+
+		if (createdMarkdownLinks.length > 0) {
+			editor.replaceSelection(createdMarkdownLinks.join("\n"));
+		}
+	};
 }
 
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
+class PastedFileRenameSettingTab extends PluginSettingTab {
+	plugin: PastedFileRenamePlugin;
 
-	onOpen() {
-		const {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
-	}
-}
-
-class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
-
-	constructor(app: App, plugin: MyPlugin) {
+	constructor(app: App, plugin: PastedFileRenamePlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
 
 	display(): void {
-		const {containerEl} = this;
-
+		const { containerEl } = this;
 		containerEl.empty();
+		containerEl.createEl("h2", { text: "Pasted File Rename Settings" });
 
 		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
-			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
-				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
-					await this.plugin.saveSettings();
-				}));
+			.setName("Allowed extensions")
+			.setDesc(
+				"Comma-separated list of extensions (without dots) to process. Example: jpg,png,mp4,pdf. These are case-insensitive."
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder(DEFAULT_SETTINGS.allowedExtensions)
+					.setValue(this.plugin.settings.allowedExtensions)
+					.onChange(async (value) => {
+						this.plugin.settings.allowedExtensions = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		containerEl.createEl("p", {
+			text: "Default: jpg,jpeg,png,gif,heic,webp,bmp,tiff,svg,mp4,webm,ogv,mov,mkv,mp3,wav,ogg,m4a,pdf",
+		});
 	}
 }
