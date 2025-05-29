@@ -1,6 +1,6 @@
 # Pasted File Rename for Obsidian
 
-![Obsidian Version](https://img.shields.io/badge/Obsidian-1.0%2B-blue.svg) ![Release Date](https://img.shields.io/badge/Released-YYYY--MM--DD-green.svg) ![License](https://img.shields.io/badge/License-GPL--3.0-blue.svg)
+![Obsidian Version](https://img.shields.io/badge/Obsidian-1.0%2B-blue.svg) ![Release Date](https://img.shields.io/badge/Released-2025--05--29-green.svg) ![License](https://img.shields.io/badge/License-GPL--3.0-blue.svg)
 
 **Automatically renames files dropped or pasted into your notes based on the active note's name, ensuring organized and contextually relevant attachment filenames.**
 
